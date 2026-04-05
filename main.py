@@ -45,7 +45,42 @@ def save_workout(workout: Workout) -> None:
         json.dump(workouts, file, indent=4)
 
 
+def load_and_print_workouts() -> None:
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as file:
+            workouts = json.load(file)
+
+        print(f"Loaded {len(workouts)} workouts:")
+        for workout in workouts:
+            print(
+                f"  - {workout['exercise_name']}: "
+                f"{workout['sets']}x{workout['reps']} @ "
+                f"{workout['weight']}kg, {workout['duration']}min"
+            )
+    except FileNotFoundError:
+        print("No workouts file found yet.")
+
+
+def print_workout_summary() -> None:
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as file:
+            workouts = json.load(file)
+
+        total_workouts = len(workouts)
+        total_sets = sum(workout["sets"] for workout in workouts)
+        total_reps = sum(workout["reps"] for workout in workouts)
+        total_duration = sum(workout["duration"] for workout in workouts)
+
+        print("\nWorkout Summary:")
+        print(f"Total workouts: {total_workouts}")
+        print(f"Total sets: {total_sets}")
+        print(f"Total reps: {total_reps}")
+        print(f"Total duration: {total_duration} minutes")
+
+    except FileNotFoundError:
+        print("No workouts file found yet.")
 if __name__ == "__main__":
-    workout = create_sample_workout()
-    save_workout(workout)
-    print("Workout saved to workouts.json")
+    sample_workout = create_sample_workout()
+    save_workout(sample_workout)
+    load_and_print_workouts()
+    print_workout_summary()  
