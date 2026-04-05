@@ -1,38 +1,37 @@
-from dataclasses import dataclass, asdict
-from datetime import datetime
 import json
-
 
 DATA_FILE = "workouts.json"
 
 
-@dataclass
 class Workout:
-    exercise_name: str
-    sets: int
-    reps: int
-    weight: float
-    duration: int
-    workout_datetime: str
+    def __init__(
+        self,
+        exercise_name: str,
+        sets: int,
+        reps: int,
+        weight: float,
+        duration: int,
+        workout_datetime: str
+    ):
+        self.exercise_name = exercise_name
+        self.sets = sets
+        self.reps = reps
+        self.weight = weight
+        self.duration = duration
+        self.workout_datetime = workout_datetime
 
     def to_dict(self) -> dict:
-        return asdict(self)
-
-
-def create_sample_workout() -> Workout:
-    return Workout(
-        exercise_name="Push Ups",
-        sets=3,
-        reps=12,
-        weight=0.0,
-        duration=10,
-        workout_datetime=datetime.now().isoformat(timespec="minutes")
-    )
+        return {
+            "exercise_name": self.exercise_name,
+            "sets": self.sets,
+            "reps": self.reps,
+            "weight": self.weight,
+            "duration": self.duration,
+            "workout_datetime": self.workout_datetime
+        }
 
 
 def save_workout(workout: Workout) -> None:
-    workouts = []
-
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as file:
             workouts = json.load(file)
@@ -45,42 +44,44 @@ def save_workout(workout: Workout) -> None:
         json.dump(workouts, file, indent=4)
 
 
-def load_and_print_workouts() -> None:
+def load_workouts() -> list:
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as file:
-            workouts = json.load(file)
-
-        print(f"Loaded {len(workouts)} workouts:")
-        for workout in workouts:
-            print(
-                f"  - {workout['exercise_name']}: "
-                f"{workout['sets']}x{workout['reps']} @ "
-                f"{workout['weight']}kg, {workout['duration']}min"
-            )
+            return json.load(file)
     except FileNotFoundError:
-        print("No workouts file found yet.")
+        return []
+
+
+def get_workout_summary() -> dict:
+    workouts = load_workouts()
+
+    return {
+        "total_workouts": len(workouts),
+        "total_sets": sum(workout["sets"] for workout in workouts),
+        "total_reps": sum(workout["reps"] for workout in workouts),
+        "total_duration": sum(workout["duration"] for workout in workouts)
+    }
 
 
 def print_workout_summary() -> None:
-    try:
-        with open(DATA_FILE, "r", encoding="utf-8") as file:
-            workouts = json.load(file)
+    summary = get_workout_summary()
 
-        total_workouts = len(workouts)
-        total_sets = sum(workout["sets"] for workout in workouts)
-        total_reps = sum(workout["reps"] for workout in workouts)
-        total_duration = sum(workout["duration"] for workout in workouts)
+    print("\nWorkout Summary:")
+    print(f"Total workouts: {summary['total_workouts']}")
+    print(f"Total sets: {summary['total_sets']}")
+    print(f"Total reps: {summary['total_reps']}")
+    print(f"Total duration: {summary['total_duration']} minutes")
 
-        print("\nWorkout Summary:")
-        print(f"Total workouts: {total_workouts}")
-        print(f"Total sets: {total_sets}")
-        print(f"Total reps: {total_reps}")
-        print(f"Total duration: {total_duration} minutes")
 
-    except FileNotFoundError:
-        print("No workouts file found yet.")
 if __name__ == "__main__":
-    sample_workout = create_sample_workout()
-    save_workout(sample_workout)
-    load_and_print_workouts()
-    print_workout_summary()  
+    workout1 = Workout("Push-ups", 3, 15, 0.0, 10, "2026-04-05T12:30")
+    save_workout(workout1)
+
+    workout2 = Workout("Squats", 4, 12, 25.0, 15, "2026-04-05T13:00")
+    save_workout(workout2)
+
+    print("Workout history:")
+    for workout in load_workouts():
+        print(workout)
+
+    print_workout_summary()
