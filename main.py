@@ -74,14 +74,4 @@ def print_workout_summary() -> None:
 
 
 if __name__ == "__main__":
-    workout1 = Workout("Push-ups", 3, 15, 0.0, 10, "2026-04-05T12:30")
-    save_workout(workout1)
-
-    workout2 = Workout("Squats", 4, 12, 25.0, 15, "2026-04-05T13:00")
-    save_workout(workout2)
-
-    print("Workout history:")
-    for workout in load_workouts():
-        print(workout)
-
-    print_workout_summary()
+    print("FitCache main module loaded.")
