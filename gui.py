@@ -29,11 +29,11 @@ TABLE_SELECTED = "#23406b"
 ENTRY_BG = "#0f1728"
 
 MILESTONES = [
-    {"name": "Starter Load", "weight": 1000, "icon": "●", "descriptor": "A strong beginning."},
-    {"name": "Motorcycle Class", "weight": 5000, "icon": "◆", "descriptor": "The equivalent of moving a motorcycle."},
-    {"name": "Grand Piano Class", "weight": 8000, "icon": "■", "descriptor": "The equivalent of moving a grand piano."},
-    {"name": "Elephant Class", "weight": 12000, "icon": "▲", "descriptor": "The equivalent of moving an elephant."},
-    {"name": "Truck Class", "weight": 30000, "icon": "★", "descriptor": "A truly elite amount of load moved."},
+    {"name": "Foundation Tier", "weight": 1000, "icon": "●", "descriptor": "Your training base is taking shape."},
+    {"name": "Performance Tier", "weight": 5000, "icon": "◆", "descriptor": "A strong body of work is building across your sessions."},
+    {"name": "Piano Tier", "weight": 8000, "icon": "■", "descriptor": "You have moved the equivalent of a grand piano."},
+    {"name": "Elephant Tier", "weight": 12000, "icon": "▲", "descriptor": "You have moved the equivalent of an elephant."},
+    {"name": "Heavy Transport Tier", "weight": 30000, "icon": "★", "descriptor": "An elite lifetime load milestone has been reached."},
 ]
 
 
@@ -369,7 +369,13 @@ class FitCacheApp(tk.Tk):
             fg=TEXT_COLOR,
             font=("Segoe UI Semibold", 18),
         ).grid(row=0, column=0, sticky="w")
-
+        tk.Label(
+            milestone_info,
+            text="A running measure of total strength output across every logged workout.",
+            bg=CARD_COLOR,
+            fg=MUTED_TEXT,
+            font=("Segoe UI", 10),
+        ).grid(row=0, column=1, sticky="e")
         tk.Label(
             milestone_info,
             textvariable=self.milestone_stat_var,
@@ -570,9 +576,11 @@ class FitCacheApp(tk.Tk):
             progress_value = max(0, min(progress_value, 100))
 
             self.milestone_copy_var.set(
-                f"You are currently in {current['name']}. {current['descriptor']}"
+                f"Current milestone: {current['name']}. {current['descriptor']}"
             )
-            self.next_goal_var.set(f"Next milestone: {next_target['name']} at {next_target['weight']:,} lb")
+            self.next_goal_var.set(
+                f"Next milestone: {next_target['name']} at {next_target['weight']:,} lb moved"
+            )
 
         self.progress["value"] = progress_value
         self.progress_percent_var.set(f"{progress_value:.0f}%")
