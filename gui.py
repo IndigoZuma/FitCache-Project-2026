@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__ import annotations test
 
 import tkinter as tk
 from tkinter import messagebox, ttk
