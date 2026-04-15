@@ -22,5 +22,45 @@
         "weight": 225.0,
         "duration": 25,
         "workout_datetime": "2026-04-12 09:00"
+    },
+    {
+        "exercise_name": "Hip adductor",
+        "sets": 3,
+        "reps": 8,
+        "weight": 40.0,
+        "duration": 9,
+        "workout_datetime": "2026-04-13 11:34"
+    },
+    {
+        "exercise_name": "Hip abductor",
+        "sets": 3,
+        "reps": 8,
+        "weight": 40.0,
+        "duration": 10,
+        "workout_datetime": "2026-04-13 11:36"
+    },
+    {
+        "exercise_name": "Bucep Curl Right",
+        "sets": 2,
+        "reps": 8,
+        "weight": 30.0,
+        "duration": 15,
+        "workout_datetime": "2026-04-13 11:36"
+    },
+    {
+        "exercise_name": "Bicep Left Curl",
+        "sets": 2,
+        "reps": 8,
+        "weight": 30.0,
+        "duration": 12,
+        "workout_datetime": "2026-04-13 11:38"
+    },
+    {
+        "exercise_name": "Leg Press",
+        "sets": 2,
+        "reps": 6,
+        "weight": 140.0,
+        "duration": 15,
+        "workout_datetime": "2026-04-15 07:40"
     }
 ]
