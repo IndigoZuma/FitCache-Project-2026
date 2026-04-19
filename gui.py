@@ -1,31 +1,30 @@
 from __future__ import annotations
 
+from datetime import datetime
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox, simpledialog
 
-from main import DATETIME_FORMAT, WorkoutService
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import BOTH, END, LEFT, RIGHT, X, Y
+
+from main import DATETIME_FORMAT, Workout, WorkoutService
 
 
 APP_TITLE = "FitCache"
-APP_GEOMETRY = "1260x820"
+APP_SIZE = (1440, 920)
+APP_MIN_SIZE = (1240, 780)
+THEME_NAME = "superhero"
+ADD_EXERCISE_OPTION = "Add Exercise..."
 
 BG_COLOR = "#0b1020"
-SURFACE_COLOR = "#121a2b"
 CARD_COLOR = "#172033"
 CARD_ALT = "#1d2940"
 PRIMARY_COLOR = "#22c7ff"
-PRIMARY_HOVER = "#14b8f0"
-SECONDARY_COLOR = "#7c3aed"
 ACCENT_COLOR = "#f59e0b"
 SUCCESS_COLOR = "#22c55e"
-DANGER_COLOR = "#ef4444"
-
 TEXT_COLOR = "#f3f7ff"
 MUTED_TEXT = "#9fb0cc"
 FAINT_TEXT = "#6f84a8"
-BORDER_COLOR = "#2b3a55"
-TABLE_ROW = "#132038"
-TABLE_SELECTED = "#23406b"
 ENTRY_BG = "#0f1728"
 
 MILESTONES = [
@@ -37,20 +36,22 @@ MILESTONES = [
 ]
 
 
-class FitCacheApp(tk.Tk):
+class FitCacheApp(ttk.Window):
     def __init__(self, service: WorkoutService | None = None) -> None:
-        super().__init__()
-        self.service = service or WorkoutService()
+        super().__init__(
+            title=APP_TITLE,
+            themename=THEME_NAME,
+            size=APP_SIZE,
+            minsize=APP_MIN_SIZE,
+            hdpi=True,
+        )
 
-        self.title(APP_TITLE)
-        self.geometry("1440x920")
         self.state("zoomed")
-        self.minsize(1320, 860)
+        self.service = service or WorkoutService()
         self.configure(bg=BG_COLOR)
 
-        self.style = ttk.Style(self)
-        self.style.theme_use("clam")
-        self._configure_styles()
+        self.selected_workout: Workout | None = None
+        self.exercise_names: list[str] = []
 
         self.status_var = tk.StringVar(value="Welcome to FitCache.")
         self.exercise_var = tk.StringVar()
@@ -69,143 +70,127 @@ class FitCacheApp(tk.Tk):
 
         self.milestone_title_var = tk.StringVar(value="Starter Load")
         self.milestone_copy_var = tk.StringVar(value="Log your first sessions to unlock milestones.")
-        self.milestone_stat_var = tk.StringVar(value="0 lb moved")
+        self.milestone_stat_var = tk.StringVar(value="0.0 lb moved")
         self.next_goal_var = tk.StringVar(value="Next milestone: 1,000 lb")
         self.progress_percent_var = tk.StringVar(value="0%")
 
+        self._configure_styles()
         self._build_layout()
         self._set_default_datetime()
-        self.refresh_dashboard()
+        self.refresh_all_views()
 
     def _configure_styles(self) -> None:
-        default_font = ("Segoe UI", 10)
-        small_font = ("Segoe UI", 9)
-        section_font = ("Segoe UI Semibold", 12)
-        heading_font = ("Segoe UI Semibold", 28)
-        metric_font = ("Segoe UI Semibold", 22)
+        style = self.style
 
-        self.option_add("*Font", default_font)
+        self.option_add("*Font", ("Segoe UI", 10))
 
-        self.style.configure("TFrame", background=BG_COLOR)
-        self.style.configure("Surface.TFrame", background=SURFACE_COLOR)
-        self.style.configure("Card.TFrame", background=CARD_COLOR)
-        self.style.configure("CardAlt.TFrame", background=CARD_ALT)
+        style.configure("TFrame", background=BG_COLOR)
+        style.configure("App.TFrame", background=BG_COLOR)
+        style.configure("Card.TFrame", background=CARD_COLOR)
+        style.configure("Alt.TFrame", background=CARD_ALT)
 
-        self.style.configure("TLabel", background=BG_COLOR, foreground=TEXT_COLOR)
-        self.style.configure("Card.TLabel", background=CARD_COLOR, foreground=TEXT_COLOR)
-        self.style.configure("Muted.Card.TLabel", background=CARD_COLOR, foreground=MUTED_TEXT)
-        self.style.configure("Alt.Card.TLabel", background=CARD_ALT, foreground=TEXT_COLOR)
-        self.style.configure("Muted.Alt.Card.TLabel", background=CARD_ALT, foreground=MUTED_TEXT)
-        self.style.configure("Hero.TLabel", background=BG_COLOR, foreground=TEXT_COLOR, font=heading_font)
-        self.style.configure("Subhero.TLabel", background=BG_COLOR, foreground=MUTED_TEXT, font=("Segoe UI", 11))
-        self.style.configure("Section.TLabel", background=CARD_COLOR, foreground=TEXT_COLOR, font=section_font)
-        self.style.configure("MetricTitle.TLabel", background=CARD_COLOR, foreground=MUTED_TEXT, font=small_font)
-        self.style.configure("InsightKey.TLabel", background=CARD_COLOR, foreground=MUTED_TEXT, font=small_font)
+        style.configure("TNotebook", background=BG_COLOR, borderwidth=0)
+        style.configure("TNotebook.Tab", padding=(16, 8), font=("Segoe UI Semibold", 10))
 
-        self.style.configure(
-            "Primary.TButton",
-            background=PRIMARY_COLOR,
-            foreground="#08101f",
-            padding=(14, 10),
-            relief="flat",
-            borderwidth=0,
+        style.configure(
+            "AppTitle.TLabel",
+            background=BG_COLOR,
+            foreground=TEXT_COLOR,
+            font=("Segoe UI Semibold", 28),
         )
-        self.style.map(
-            "Primary.TButton",
-            background=[("active", PRIMARY_HOVER), ("pressed", PRIMARY_HOVER)],
+        style.configure(
+            "Subtitle.TLabel",
+            background=BG_COLOR,
+            foreground=MUTED_TEXT,
+            font=("Segoe UI", 11),
         )
-
-        self.style.configure(
-            "Secondary.TButton",
+        style.configure(
+            "Section.TLabel",
+            background=CARD_COLOR,
+            foreground=TEXT_COLOR,
+            font=("Segoe UI Semibold", 12),
+        )
+        style.configure(
+            "SectionAlt.TLabel",
             background=CARD_ALT,
             foreground=TEXT_COLOR,
-            padding=(14, 10),
-            relief="flat",
-            borderwidth=0,
+            font=("Segoe UI Semibold", 12),
         )
-        self.style.map(
-            "Secondary.TButton",
-            background=[("active", "#293a59"), ("pressed", "#293a59")],
-        )
-
-        self.style.configure(
-            "TEntry",
-            fieldbackground=ENTRY_BG,
-            foreground=TEXT_COLOR,
-            bordercolor=BORDER_COLOR,
-            lightcolor=BORDER_COLOR,
-            darkcolor=BORDER_COLOR,
-            insertcolor=TEXT_COLOR,
-            padding=8,
+        style.configure("Card.TLabel", background=CARD_COLOR, foreground=TEXT_COLOR)
+        style.configure("Muted.Card.TLabel", background=CARD_COLOR, foreground=MUTED_TEXT)
+        style.configure("Alt.TLabel", background=CARD_ALT, foreground=TEXT_COLOR)
+        style.configure("Muted.Alt.TLabel", background=CARD_ALT, foreground=MUTED_TEXT)
+        style.configure(
+            "MetricTitle.TLabel",
+            background=CARD_COLOR,
+            foreground=MUTED_TEXT,
+            font=("Segoe UI", 9),
         )
 
-        self.style.configure(
-            "Treeview",
-            background=TABLE_ROW,
-            fieldbackground=TABLE_ROW,
-            foreground=TEXT_COLOR,
-            bordercolor=BORDER_COLOR,
-            lightcolor=BORDER_COLOR,
-            darkcolor=BORDER_COLOR,
-            rowheight=32,
-        )
-        self.style.map(
-            "Treeview",
-            background=[("selected", TABLE_SELECTED)],
-            foreground=[("selected", TEXT_COLOR)],
-        )
-        self.style.configure(
-            "Treeview.Heading",
-            background=CARD_ALT,
-            foreground=TEXT_COLOR,
-            bordercolor=BORDER_COLOR,
-            lightcolor=CARD_ALT,
-            darkcolor=CARD_ALT,
-            font=("Segoe UI Semibold", 10),
-            relief="flat",
-            padding=(8, 8),
-        )
-
-        self.style.configure(
-            "Volume.Horizontal.TProgressbar",
-            troughcolor="#0e1627",
-            bordercolor="#0e1627",
-            background=PRIMARY_COLOR,
-            lightcolor=PRIMARY_COLOR,
-            darkcolor=PRIMARY_COLOR,
-            thickness=18,
-        )
+        style.configure("Treeview", rowheight=32, font=("Segoe UI", 10))
+        style.configure("Treeview.Heading", font=("Segoe UI Semibold", 10))
 
     def _build_layout(self) -> None:
-        container = ttk.Frame(self, padding=20, style="TFrame")
-        container.pack(fill="both", expand=True)
-        container.columnconfigure(0, weight=1)
-        container.rowconfigure(2, weight=1)
+        outer = ttk.Frame(self, style="App.TFrame", padding=18)
+        outer.pack(fill=BOTH, expand=True)
 
-        header = ttk.Frame(container, style="TFrame")
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 16))
-        header.columnconfigure(0, weight=1)
+        self._build_header(outer)
+        self._build_tabs(outer)
+        self._build_status_bar()
 
-        ttk.Label(header, text="FitCache Performance Dashboard", style="Hero.TLabel").grid(row=0, column=0, sticky="w")
+    def _build_header(self, parent: ttk.Frame) -> None:
+        header = ttk.Frame(parent, style="App.TFrame")
+        header.pack(fill=X, pady=(0, 12))
+
+        title_wrap = ttk.Frame(header, style="App.TFrame")
+        title_wrap.pack(side=LEFT, fill=X, expand=True)
+
         ttk.Label(
-            header,
-            text="A workout tracker that makes progress feel powerful, visual, and presentation-ready.",
-            style="Subhero.TLabel",
-        ).grid(row=1, column=0, sticky="w", pady=(6, 0))
+            title_wrap,
+            text="FitCache Performance Dashboard",
+            style="AppTitle.TLabel",
+        ).pack(anchor="w")
 
-        hero_badge = tk.Label(
+        ttk.Label(
+            title_wrap,
+            text="A workout tracker that makes progress feel powerful, visual, and presentation-ready.",
+            style="Subtitle.TLabel",
+        ).pack(anchor="w", pady=(4, 0))
+
+        badge = tk.Label(
             header,
             text="LIVE WORKOUT INTELLIGENCE",
             bg=BG_COLOR,
             fg=PRIMARY_COLOR,
             font=("Segoe UI Semibold", 9),
             padx=10,
-            pady=4,
+            pady=6,
         )
-        hero_badge.grid(row=0, column=1, sticky="e")
+        badge.pack(side=RIGHT, anchor="n")
 
-        summary_frame = ttk.Frame(container, style="TFrame")
-        summary_frame.grid(row=1, column=0, sticky="ew", pady=(0, 16))
+    def _build_tabs(self, parent: ttk.Frame) -> None:
+        self.notebook = ttk.Notebook(parent, bootstyle="primary")
+        self.notebook.pack(fill=BOTH, expand=True)
+
+        self.dashboard_tab = ttk.Frame(self.notebook, style="App.TFrame", padding=8)
+        self.log_tab = ttk.Frame(self.notebook, style="App.TFrame", padding=8)
+        self.history_tab = ttk.Frame(self.notebook, style="App.TFrame", padding=8)
+        self.summary_tab = ttk.Frame(self.notebook, style="App.TFrame", padding=8)
+
+        self.notebook.add(self.dashboard_tab, text="Dashboard")
+        self.notebook.add(self.log_tab, text="Log Workout")
+        self.notebook.add(self.history_tab, text="History")
+        self.notebook.add(self.summary_tab, text="Summary")
+
+        self._build_dashboard_tab()
+        self._build_log_tab()
+        self._build_history_tab()
+        self._build_summary_tab()
+
+    def _build_dashboard_tab(self) -> None:
+        summary_frame = ttk.Frame(self.dashboard_tab, style="App.TFrame")
+        summary_frame.pack(fill=X, pady=(0, 14))
+
         for index in range(6):
             summary_frame.columnconfigure(index, weight=1)
 
@@ -216,23 +201,112 @@ class FitCacheApp(tk.Tk):
         self._create_metric_card(summary_frame, "Top Exercise", self.top_exercise_var, 4)
         self._create_metric_card(summary_frame, "Total Volume", self.total_volume_var, 5)
 
-        main_panel = ttk.Frame(container, style="TFrame")
-        main_panel.grid(row=2, column=0, sticky="nsew")
-        main_panel.rowconfigure(0, weight=1)
-        main_panel.rowconfigure(1, weight=0)
-        main_panel.rowconfigure(2, weight=0)
-        main_panel.rowconfigure(0, weight=1)
-        main_panel.rowconfigure(1, weight=0)
+        lower = ttk.Frame(self.dashboard_tab, style="App.TFrame")
+        lower.pack(fill=BOTH, expand=True)
 
-        history_card = ttk.Frame(main_panel, style="Card.TFrame", padding=16)
-        history_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10), pady=(0, 10))
-        history_card.columnconfigure(0, weight=1)
-        history_card.rowconfigure(1, weight=1)
+        left = ttk.Frame(lower, style="App.TFrame")
+        left.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 10))
 
-        ttk.Label(history_card, text="Workout History", style="Section.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 12))
+        right = ttk.Frame(lower, style="App.TFrame")
+        right.pack(side=RIGHT, fill=BOTH, expand=True)
+
+        self._build_recent_history_panel(left)
+        self._build_dashboard_insights_panel(right)
+        self._build_dashboard_milestone_preview(right)
+
+    def _build_log_tab(self) -> None:
+        form_card = ttk.Frame(self.log_tab, style="Card.TFrame", padding=20)
+        form_card.pack(fill=X, pady=(4, 12))
+
+        ttk.Label(
+            form_card,
+            text="Log Workout",
+            style="Section.TLabel",
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 18))
+
+        form_card.columnconfigure(0, weight=1)
+        form_card.columnconfigure(1, weight=1)
+
+        self._create_exercise_dropdown(form_card, 1, 0)
+        self._create_entry_field(form_card, "Sets", self.sets_var, 1, 1)
+        self._create_entry_field(form_card, "Reps", self.reps_var, 2, 0)
+        self._create_entry_field(form_card, "Weight (lb)", self.weight_var, 2, 1)
+        self._create_entry_field(form_card, "Duration (minutes)", self.duration_var, 3, 0)
+        self._create_entry_field(form_card, "Date & Time", self.datetime_var, 3, 1, readonly=True)
+
+        button_row = ttk.Frame(form_card, style="Card.TFrame")
+        button_row.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(18, 0))
+        button_row.columnconfigure(0, weight=1)
+        button_row.columnconfigure(1, weight=1)
+
+        ttk.Button(
+            button_row,
+            text="Save Workout",
+            bootstyle="info",
+            command=self.save_workout,
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+
+        ttk.Button(
+            button_row,
+            text="Clear Form",
+            bootstyle="secondary",
+            command=self.clear_form,
+        ).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+
+        tips_card = ttk.Frame(self.log_tab, style="Alt.TFrame", padding=18)
+        tips_card.pack(fill=X)
+
+        ttk.Label(
+            tips_card,
+            text="Beginner Tips",
+            style="SectionAlt.TLabel",
+        ).pack(anchor="w", pady=(0, 10))
+
+        ttk.Label(
+            tips_card,
+            text="Choose an exercise from the list or use Add Exercise... to create a new one. The service layer will normalize capitalization and common spelling issues when saving.",
+            style="Muted.Alt.TLabel",
+            wraplength=900,
+            justify="left",
+        ).pack(anchor="w")
+
+    def _build_history_tab(self) -> None:
+        history_card = ttk.Frame(self.history_tab, style="Card.TFrame", padding=18)
+        history_card.pack(fill=BOTH, expand=True)
+
+        header = ttk.Frame(history_card, style="Card.TFrame")
+        header.pack(fill=X, pady=(0, 12))
+
+        ttk.Label(header, text="Workout History", style="Section.TLabel").pack(side=LEFT)
+
+        button_wrap = ttk.Frame(header, style="Card.TFrame")
+        button_wrap.pack(side=RIGHT)
+
+        ttk.Button(
+            button_wrap,
+            text="Refresh",
+            bootstyle="secondary-outline",
+            command=self.refresh_all_views,
+        ).pack(side=LEFT, padx=(0, 8))
+
+        ttk.Button(
+            button_wrap,
+            text="Delete Selected",
+            bootstyle="danger",
+            command=self.delete_selected_workout,
+        ).pack(side=LEFT)
+
+        table_frame = ttk.Frame(history_card, style="Card.TFrame")
+        table_frame.pack(fill=BOTH, expand=True)
 
         columns = ("exercise", "sets", "reps", "weight", "duration", "date")
-        self.history_tree = ttk.Treeview(history_card, columns=columns, show="headings")
+        self.history_tree = ttk.Treeview(
+            table_frame,
+            columns=columns,
+            show="headings",
+            bootstyle="info",
+        )
+
         headings = {
             "exercise": "Exercise",
             "sets": "Sets",
@@ -242,82 +316,50 @@ class FitCacheApp(tk.Tk):
             "date": "Date / Time",
         }
         widths = {
-            "exercise": 160,
-            "sets": 70,
-            "reps": 70,
-            "weight": 90,
-            "duration": 90,
-            "date": 160,
+            "exercise": 220,
+            "sets": 90,
+            "reps": 90,
+            "weight": 110,
+            "duration": 110,
+            "date": 180,
         }
 
         for column in columns:
             self.history_tree.heading(column, text=headings[column])
             self.history_tree.column(column, width=widths[column], anchor="center")
 
-        scrollbar = ttk.Scrollbar(history_card, orient="vertical", command=self.history_tree.yview)
+        self.history_tree.column("exercise", anchor="w")
+
+        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.history_tree.yview)
         self.history_tree.configure(yscrollcommand=scrollbar.set)
-        self.history_tree.grid(row=1, column=0, sticky="nsew")
-        scrollbar.grid(row=1, column=1, sticky="ns")
 
-        right_panel = ttk.Frame(main_panel, style="TFrame")
-        right_panel.grid(row=0, column=1, sticky="nsew", pady=(0, 10))
-        right_panel.columnconfigure(0, weight=1)
-        right_panel.rowconfigure(0, weight=3)
-        right_panel.rowconfigure(1, weight=2)
+        self.history_tree.pack(side=LEFT, fill=BOTH, expand=True)
+        scrollbar.pack(side=RIGHT, fill=Y)
 
-        form_card = ttk.Frame(right_panel, style="Card.TFrame", padding=16)
-        form_card.grid(row=0, column=0, sticky="ew", pady=(0, 12))
-        form_card.columnconfigure(0, weight=1)
-        form_card.columnconfigure(1, weight=1)
+        self.history_tree.bind("<<TreeviewSelect>>", self._on_tree_select)
 
-        ttk.Label(form_card, text="Log Workout", style="Section.TLabel").grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 14))
+    def _build_summary_tab(self) -> None:
+        top = ttk.Frame(self.summary_tab, style="App.TFrame")
+        top.pack(fill=X, pady=(0, 12))
 
-        self._create_field(form_card, "Exercise Name", self.exercise_var, 1, 0)
-        self._create_field(form_card, "Sets", self.sets_var, 1, 1)
-        self._create_field(form_card, "Reps", self.reps_var, 2, 0)
-        self._create_field(form_card, "Weight (lb)", self.weight_var, 2, 1)
-        self._create_field(form_card, "Duration (minutes)", self.duration_var, 3, 0)
-        self._create_field(form_card, f"Date & Time ({DATETIME_FORMAT})", self.datetime_var, 3, 1)
+        insights_card = ttk.Frame(top, style="Alt.TFrame", padding=18)
+        insights_card.pack(fill=X)
 
-        button_row = ttk.Frame(form_card, style="Card.TFrame")
-        button_row.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(16, 0))
-        button_row.columnconfigure(0, weight=1)
-        button_row.columnconfigure(1, weight=1)
-
-        ttk.Button(button_row, text="Save Workout", style="Primary.TButton", command=self.save_workout).grid(
-            row=0, column=0, sticky="ew", padx=(0, 6)
-        )
-        ttk.Button(button_row, text="Clear Form", style="Secondary.TButton", command=self.clear_form).grid(
-            row=0, column=1, sticky="ew", padx=(6, 0)
-        )
-
-        insights_card = ttk.Frame(right_panel, style="CardAlt.TFrame", padding=16)
-        insights_card.grid(row=1, column=0, sticky="ew", pady=(2, 0))
+        ttk.Label(
+            insights_card,
+            text="Insights",
+            style="SectionAlt.TLabel",
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
         insights_card.columnconfigure(0, weight=1)
         insights_card.columnconfigure(1, weight=1)
 
-        insights_card = ttk.Frame(main_panel, style="CardAlt.TFrame", padding=16)
-        insights_card.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
-        insights_card.columnconfigure(0, weight=1)
-        insights_card.columnconfigure(1, weight=1)
-        insights_card.columnconfigure(2, weight=1)
+        self._create_summary_row(insights_card, "Top Exercise", self.top_exercise_var, 1)
+        self._create_summary_row(insights_card, "Total Volume", self.total_volume_var, 2)
+        self._create_summary_row(insights_card, "Milestone", self.milestone_title_var, 3)
 
-        tk.Label(
-        insights_card,
-        text="Insights",
-        bg=CARD_ALT,
-        fg=TEXT_COLOR,
-        font=("Segoe UI Semibold", 12),
-        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 12))
+        milestone_card = ttk.Frame(self.summary_tab, style="Card.TFrame", padding=18)
+        milestone_card.pack(fill=BOTH, expand=True)
 
-        self._create_insight_row(insights_card, "Top Exercise", self.top_exercise_var, 1)
-        self._create_insight_row(insights_card, "Total Volume", self.total_volume_var, 2)
-        self._create_insight_row(insights_card, "Milestone", self.milestone_title_var, 3)
-
-        milestone_card = ttk.Frame(main_panel, style="Card.TFrame", padding=18)
-        milestone_card.grid(row=2, column=0, columnspan=2, sticky="ew")
-
-        
         milestone_card.columnconfigure(0, weight=2)
         milestone_card.columnconfigure(1, weight=3)
 
@@ -331,7 +373,7 @@ class FitCacheApp(tk.Tk):
         )
         left_visual.grid(row=0, column=0, sticky="w", padx=(0, 18))
 
-        left_visual.create_rectangle(16, 18, 304, 162, fill="#0f1728", outline="")
+        left_visual.create_rectangle(16, 18, 304, 162, fill=ENTRY_BG, outline="")
         left_visual.create_oval(36, 34, 118, 116, fill="#16314d", outline="")
         left_visual.create_oval(90, 46, 194, 150, fill="#1c486d", outline="")
         left_visual.create_oval(156, 58, 284, 154, fill="#245b88", outline="")
@@ -358,59 +400,61 @@ class FitCacheApp(tk.Tk):
         )
         self.visual_canvas = left_visual
 
-        milestone_info = ttk.Frame(milestone_card, style="Card.TFrame")
-        milestone_info.grid(row=0, column=1, sticky="nsew")
-        milestone_info.columnconfigure(0, weight=1)
+        info = ttk.Frame(milestone_card, style="Card.TFrame")
+        info.grid(row=0, column=1, sticky="nsew")
+        info.columnconfigure(0, weight=1)
 
         tk.Label(
-            milestone_info,
+            info,
             text="Lifetime Load Moved",
             bg=CARD_COLOR,
             fg=TEXT_COLOR,
             font=("Segoe UI Semibold", 18),
         ).grid(row=0, column=0, sticky="w")
+
         tk.Label(
-            milestone_info,
+            info,
             text="A running measure of total strength output across every logged workout.",
             bg=CARD_COLOR,
             fg=MUTED_TEXT,
             font=("Segoe UI", 10),
-        ).grid(row=0, column=1, sticky="e")
+        ).grid(row=1, column=0, sticky="w", pady=(4, 4))
+
         tk.Label(
-            milestone_info,
+            info,
             textvariable=self.milestone_stat_var,
             bg=CARD_COLOR,
             fg=PRIMARY_COLOR,
             font=("Segoe UI Semibold", 28),
-        ).grid(row=1, column=0, sticky="w", pady=(4, 2))
+        ).grid(row=2, column=0, sticky="w", pady=(6, 4))
 
         tk.Label(
-            milestone_info,
+            info,
             textvariable=self.milestone_copy_var,
             bg=CARD_COLOR,
             fg=MUTED_TEXT,
             justify="left",
-            wraplength=560,
+            wraplength=620,
             font=("Segoe UI", 11),
-        ).grid(row=2, column=0, sticky="w", pady=(0, 14))
+        ).grid(row=3, column=0, sticky="w", pady=(0, 14))
 
         self.progress = ttk.Progressbar(
-            milestone_info,
-            style="Volume.Horizontal.TProgressbar",
+            info,
+            bootstyle="info-striped",
             orient="horizontal",
             mode="determinate",
             maximum=100,
             value=0,
         )
-        self.progress.grid(row=3, column=0, sticky="ew", pady=(0, 10))
+        self.progress.grid(row=4, column=0, sticky="ew", pady=(0, 10))
 
-        progress_meta = ttk.Frame(milestone_info, style="Card.TFrame")
-        progress_meta.grid(row=4, column=0, sticky="ew")
-        progress_meta.columnconfigure(0, weight=1)
-        progress_meta.columnconfigure(1, weight=0)
+        meta = ttk.Frame(info, style="Card.TFrame")
+        meta.grid(row=5, column=0, sticky="ew")
+        meta.columnconfigure(0, weight=1)
+        meta.columnconfigure(1, weight=0)
 
         tk.Label(
-            progress_meta,
+            meta,
             textvariable=self.next_goal_var,
             bg=CARD_COLOR,
             fg=FAINT_TEXT,
@@ -418,13 +462,119 @@ class FitCacheApp(tk.Tk):
         ).grid(row=0, column=0, sticky="w")
 
         tk.Label(
-            progress_meta,
+            meta,
             textvariable=self.progress_percent_var,
             bg=CARD_COLOR,
             fg=ACCENT_COLOR,
             font=("Segoe UI Semibold", 10),
         ).grid(row=0, column=1, sticky="e")
 
+    def _build_recent_history_panel(self, parent: ttk.Frame) -> None:
+        card = ttk.Frame(parent, style="Card.TFrame", padding=18)
+        card.pack(fill=BOTH, expand=True)
+
+        ttk.Label(card, text="Recent Workouts", style="Section.TLabel").pack(anchor="w", pady=(0, 12))
+
+        columns = ("exercise", "sets", "reps", "weight", "duration", "date")
+        self.dashboard_tree = ttk.Treeview(
+            card,
+            columns=columns,
+            show="headings",
+            height=10,
+            bootstyle="info",
+        )
+
+        headings = {
+            "exercise": "Exercise",
+            "sets": "Sets",
+            "reps": "Reps",
+            "weight": "Weight",
+            "duration": "Minutes",
+            "date": "Date / Time",
+        }
+
+        for column, label in headings.items():
+            self.dashboard_tree.heading(column, text=label)
+
+        self.dashboard_tree.column("exercise", width=180, anchor="w")
+        self.dashboard_tree.column("sets", width=70, anchor="center")
+        self.dashboard_tree.column("reps", width=70, anchor="center")
+        self.dashboard_tree.column("weight", width=90, anchor="center")
+        self.dashboard_tree.column("duration", width=90, anchor="center")
+        self.dashboard_tree.column("date", width=160, anchor="center")
+
+        self.dashboard_tree.pack(fill=BOTH, expand=True)
+
+    def _build_dashboard_insights_panel(self, parent: ttk.Frame) -> None:
+        card = ttk.Frame(parent, style="Alt.TFrame", padding=18)
+        card.pack(fill=X, pady=(0, 10))
+
+        ttk.Label(card, text="Insights", style="SectionAlt.TLabel").grid(
+            row=0,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            pady=(0, 12),
+        )
+        card.columnconfigure(0, weight=1)
+        card.columnconfigure(1, weight=1)
+
+        self._create_summary_row(card, "Top Exercise", self.top_exercise_var, 1)
+        self._create_summary_row(card, "Total Volume", self.total_volume_var, 2)
+        self._create_summary_row(card, "Milestone", self.milestone_title_var, 3)
+
+    def _build_dashboard_milestone_preview(self, parent: ttk.Frame) -> None:
+        card = ttk.Frame(parent, style="Card.TFrame", padding=18)
+        card.pack(fill=BOTH, expand=True)
+
+        ttk.Label(card, text="Milestone Preview", style="Section.TLabel").pack(anchor="w", pady=(0, 12))
+
+        ttk.Label(
+            card,
+            textvariable=self.milestone_title_var,
+            style="Card.TLabel",
+            font=("Segoe UI Semibold", 18),
+        ).pack(anchor="w")
+
+        ttk.Label(
+            card,
+            textvariable=self.milestone_stat_var,
+            style="Card.TLabel",
+            font=("Segoe UI Semibold", 24),
+            foreground=PRIMARY_COLOR,
+        ).pack(anchor="w", pady=(8, 4))
+
+        ttk.Label(
+            card,
+            textvariable=self.milestone_copy_var,
+            style="Muted.Card.TLabel",
+            wraplength=420,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 12))
+
+        self.preview_progress = ttk.Progressbar(
+            card,
+            bootstyle="warning-striped",
+            orient="horizontal",
+            mode="determinate",
+            maximum=100,
+            value=0,
+        )
+        self.preview_progress.pack(fill=X, pady=(0, 8))
+
+        meta = ttk.Frame(card, style="Card.TFrame")
+        meta.pack(fill=X)
+
+        ttk.Label(meta, textvariable=self.next_goal_var, style="Muted.Card.TLabel").pack(side=LEFT)
+        tk.Label(
+            meta,
+            textvariable=self.progress_percent_var,
+            bg=CARD_COLOR,
+            fg=ACCENT_COLOR,
+            font=("Segoe UI Semibold", 10),
+        ).pack(side=RIGHT)
+
+    def _build_status_bar(self) -> None:
         status_bar = tk.Label(
             self,
             textvariable=self.status_var,
@@ -435,11 +585,18 @@ class FitCacheApp(tk.Tk):
             pady=10,
             font=("Segoe UI", 10),
         )
-        status_bar.pack(fill="x", side="bottom")
+        status_bar.pack(fill=X, side="bottom")
 
-    def _create_metric_card(self, parent: ttk.Frame, title: str, value_var: tk.StringVar, column: int) -> None:
+    def _create_metric_card(
+        self,
+        parent: ttk.Frame,
+        title: str,
+        value_var: tk.StringVar,
+        column: int,
+    ) -> None:
         card = ttk.Frame(parent, style="Card.TFrame", padding=14)
         card.grid(row=0, column=column, sticky="ew", padx=(0 if column == 0 else 8, 0))
+
         ttk.Label(card, text=title, style="MetricTitle.TLabel").pack(anchor="w")
         tk.Label(
             card,
@@ -449,7 +606,39 @@ class FitCacheApp(tk.Tk):
             font=("Segoe UI Semibold", 20),
         ).pack(anchor="w", pady=(8, 0))
 
-    def _create_field(self, parent: ttk.Frame, label: str, variable: tk.StringVar, row: int, column: int) -> None:
+    def _create_exercise_dropdown(self, parent: ttk.Frame, row: int, column: int) -> None:
+        ttk.Label(parent, text="Exercise Name", style="Card.TLabel").grid(
+            row=row * 2 - 1,
+            column=column,
+            sticky="w",
+            padx=(0, 8),
+            pady=(4, 4),
+        )
+
+        self.exercise_combobox = ttk.Combobox(
+            parent,
+            textvariable=self.exercise_var,
+            state="readonly",
+            bootstyle="info",
+        )
+        self.exercise_combobox.grid(
+            row=row * 2,
+            column=column,
+            sticky="ew",
+            padx=(0, 8),
+            pady=(0, 8),
+        )
+        self.exercise_combobox.bind("<<ComboboxSelected>>", self._on_exercise_selected)
+
+    def _create_entry_field(
+        self,
+        parent: ttk.Frame,
+        label: str,
+        variable: tk.StringVar,
+        row: int,
+        column: int,
+        readonly: bool = False,
+    ) -> None:
         ttk.Label(parent, text=label, style="Card.TLabel").grid(
             row=row * 2 - 1,
             column=column,
@@ -457,10 +646,20 @@ class FitCacheApp(tk.Tk):
             padx=(0, 8),
             pady=(4, 4),
         )
+
         entry = ttk.Entry(parent, textvariable=variable)
+        if readonly:
+            entry.configure(state="readonly")
+
         entry.grid(row=row * 2, column=column, sticky="ew", padx=(0, 8), pady=(0, 8))
 
-    def _create_insight_row(self, parent: ttk.Frame, label: str, value_var: tk.StringVar, row: int) -> None:
+    def _create_summary_row(
+        self,
+        parent: ttk.Frame,
+        label: str,
+        value_var: tk.StringVar,
+        row: int,
+    ) -> None:
         tk.Label(
             parent,
             text=label,
@@ -468,6 +667,7 @@ class FitCacheApp(tk.Tk):
             fg=MUTED_TEXT,
             font=("Segoe UI", 10),
         ).grid(row=row, column=0, sticky="w", pady=6)
+
         tk.Label(
             parent,
             textvariable=value_var,
@@ -477,15 +677,68 @@ class FitCacheApp(tk.Tk):
         ).grid(row=row, column=1, sticky="e", pady=6)
 
     def _set_default_datetime(self) -> None:
-        self.datetime_var.set(__import__("datetime").datetime.now().strftime(DATETIME_FORMAT))
+        self.datetime_var.set(datetime.now().strftime(DATETIME_FORMAT))
+
+    def _refresh_exercise_dropdown(self) -> None:
+        self.exercise_names = self.service.get_all_exercise_names()
+        values = [*self.exercise_names, ADD_EXERCISE_OPTION]
+        self.exercise_combobox["values"] = values
+
+        current_value = self.exercise_var.get()
+        if current_value in self.exercise_names:
+            return
+
+        if self.exercise_names:
+            self.exercise_var.set(self.exercise_names[0])
+        else:
+            self.exercise_var.set("")
+
+    def _on_exercise_selected(self, _event: tk.Event) -> None:
+        if self.exercise_var.get() != ADD_EXERCISE_OPTION:
+            return
+
+        entered_name = simpledialog.askstring(
+            "Add Exercise",
+            "Enter a new exercise name:",
+            parent=self,
+        )
+
+        if entered_name is None:
+            if self.exercise_names:
+                self.exercise_var.set(self.exercise_names[0])
+            else:
+                self.exercise_var.set("")
+            return
+
+        normalized_name = self.service.normalize_exercise_name(entered_name)
+        if not normalized_name:
+            messagebox.showwarning("Invalid Exercise", "Exercise name cannot be empty.")
+            if self.exercise_names:
+                self.exercise_var.set(self.exercise_names[0])
+            else:
+                self.exercise_var.set("")
+            return
+
+        if normalized_name not in self.exercise_names:
+            self.exercise_names.append(normalized_name)
+            self.exercise_names.sort()
+            self.exercise_combobox["values"] = [*self.exercise_names, ADD_EXERCISE_OPTION]
+
+        self.exercise_var.set(normalized_name)
+        self.status_var.set(f"Ready to save new exercise: {normalized_name}")
 
     def clear_form(self) -> None:
-        self.exercise_var.set("")
         self.sets_var.set("")
         self.reps_var.set("")
         self.weight_var.set("")
         self.duration_var.set("")
         self._set_default_datetime()
+
+        if self.exercise_names:
+            self.exercise_var.set(self.exercise_names[0])
+        else:
+            self.exercise_var.set("")
+
         self.status_var.set("Form cleared.")
 
     def save_workout(self) -> None:
@@ -503,16 +756,78 @@ class FitCacheApp(tk.Tk):
             self.status_var.set("Unable to save workout. Please correct the form.")
             return
         except Exception as exc:
-            messagebox.showerror("Application Error", f"An unexpected error occurred: {exc}")
+            messagebox.showerror("Application Error", f"An unexpected error occurred:\n\n{exc}")
             self.status_var.set("An unexpected error occurred.")
             return
 
-        self.refresh_dashboard()
+        self.refresh_all_views()
         self.clear_form()
         self.status_var.set(f"Saved workout: {workout.exercise_name}.")
         messagebox.showinfo("Success", "Workout saved successfully.")
 
-    def refresh_dashboard(self) -> None:
+    def delete_selected_workout(self) -> None:
+        selected = self.history_tree.selection()
+        if not selected:
+            messagebox.showwarning("No Selection", "Please select a workout to delete.")
+            self.status_var.set("No workout selected for deletion.")
+            return
+
+        item_id = selected[0]
+        tags = self.history_tree.item(item_id, "tags")
+        workout_tag = tags[0] if tags else None
+
+        if workout_tag is None:
+            messagebox.showerror("Error", "Could not identify the selected workout.")
+            self.status_var.set("Delete failed: missing workout reference.")
+            return
+
+        values = self.history_tree.item(item_id, "values")
+        exercise_name = values[0]
+
+        confirmed = messagebox.askyesno(
+            "Confirm Delete",
+            f"Delete workout '{exercise_name}'?",
+        )
+        if not confirmed:
+            self.status_var.set("Delete cancelled.")
+            return
+
+        resolved_workout = self._workout_from_tag(workout_tag)
+        if resolved_workout is None:
+            messagebox.showerror("Error", "Could not match the selected workout in storage.")
+            self.status_var.set("Delete failed: workout not found.")
+            return
+
+        deleted = self.service.delete_workout(resolved_workout)
+        if deleted:
+            self.refresh_all_views()
+            self.status_var.set(f"Deleted workout: {resolved_workout.exercise_name}.")
+            messagebox.showinfo("Deleted", "Workout deleted successfully.")
+        else:
+            messagebox.showerror("Delete Failed", "The selected workout could not be deleted.")
+            self.status_var.set("Delete failed.")
+
+    def _workout_to_tag(self, workout: Workout) -> str:
+        return "|||".join(
+            [
+                workout.exercise_name,
+                str(workout.sets),
+                str(workout.reps),
+                f"{workout.weight:.1f}",
+                str(workout.duration),
+                workout.workout_datetime,
+            ]
+        )
+
+    def _workout_from_tag(self, tag_value: str) -> Workout | None:
+        for workout in self.service.get_workouts():
+            if self._workout_to_tag(workout) == tag_value:
+                return workout
+        return None
+
+    def refresh_all_views(self) -> None:
+        self._set_default_datetime()
+
         summary = self.service.get_workout_summary()
         workouts = self.service.get_workouts()
 
@@ -523,13 +838,19 @@ class FitCacheApp(tk.Tk):
         self.top_exercise_var.set(str(summary["top_exercise"]))
         self.total_volume_var.set(f"{summary['total_volume']:.1f} lb")
 
-        for item in self.history_tree.get_children():
-            self.history_tree.delete(item)
+        self._refresh_tree(self.history_tree, workouts)
+        self._refresh_tree(self.dashboard_tree, workouts[:10])
+        self._refresh_exercise_dropdown()
+        self._update_milestone(float(summary["total_volume"]))
+
+    def _refresh_tree(self, tree: ttk.Treeview, workouts: list[Workout]) -> None:
+        for item in tree.get_children():
+            tree.delete(item)
 
         for workout in workouts:
-            self.history_tree.insert(
+            tree.insert(
                 "",
-                "end",
+                END,
                 values=(
                     workout.exercise_name,
                     workout.sets,
@@ -538,9 +859,21 @@ class FitCacheApp(tk.Tk):
                     workout.duration,
                     workout.workout_datetime,
                 ),
+                tags=(self._workout_to_tag(workout),),
             )
 
-        self._update_milestone(summary["total_volume"])
+    def _on_tree_select(self, _event: tk.Event) -> None:
+        selected = self.history_tree.selection()
+        if not selected:
+            self.selected_workout = None
+            return
+
+        tag_list = self.history_tree.item(selected[0], "tags")
+        if not tag_list:
+            self.selected_workout = None
+            return
+
+        self.selected_workout = self._workout_from_tag(tag_list[0])
 
     def _update_milestone(self, total_volume: float) -> None:
         current = MILESTONES[0]
@@ -583,17 +916,15 @@ class FitCacheApp(tk.Tk):
             )
 
         self.progress["value"] = progress_value
+        self.preview_progress["value"] = progress_value
         self.progress_percent_var.set(f"{progress_value:.0f}%")
         self.visual_canvas.itemconfigure(self.visual_icon_text, text=current["icon"])
         self.visual_canvas.itemconfigure(self.visual_class_text, text=current["name"])
 
-    def mainloop_safe(self) -> None:
-        self.mainloop()
-
 
 def main() -> None:
     app = FitCacheApp()
-    app.mainloop_safe()
+    app.mainloop()
 
 
 if __name__ == "__main__":
