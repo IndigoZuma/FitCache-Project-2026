@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import string
+import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -10,7 +11,16 @@ from spellchecker import SpellChecker
 
 
 DATETIME_FORMAT = "%Y-%m-%d %H:%M"
-DATA_FILE = Path(__file__).with_name("workouts.json")
+
+
+def get_base_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+BASE_DIR = get_base_dir()
+DATA_FILE = BASE_DIR / "workouts.json"
 
 
 @dataclass(frozen=True)
@@ -44,13 +54,6 @@ class WorkoutRepository:
                 if not isinstance(item, dict):
                     continue
 
-                workout_datetime = str(
-                    item.get(
-                        "workout_datetime",
-                        datetime.now().strftime(DATETIME_FORMAT),
-                    )
-                )
-
                 workouts.append(
                     Workout(
                         exercise_name=str(item.get("exercise_name", "")).strip(),
@@ -58,7 +61,12 @@ class WorkoutRepository:
                         reps=int(item.get("reps", 0)),
                         weight=float(item.get("weight", 0)),
                         duration=int(item.get("duration", 0)),
-                        workout_datetime=workout_datetime,
+                        workout_datetime=str(
+                            item.get(
+                                "workout_datetime",
+                                datetime.now().strftime(DATETIME_FORMAT),
+                            )
+                        ).strip(),
                     )
                 )
             return workouts
@@ -202,7 +210,7 @@ class WorkoutService:
 
         timestamp = (
             workout_datetime.strip()
-            if workout_datetime
+            if workout_datetime and workout_datetime.strip()
             else datetime.now().strftime(DATETIME_FORMAT)
         )
         parsed_timestamp = self._parse_datetime(timestamp)
@@ -223,79 +231,9 @@ class WorkoutService:
         return workout
 
     def get_workouts(self) -> list[Workout]:
-        normalized_workouts: list[Workout] = []
-
-        for workout in self.repository.load_workouts():
-            normalized_workouts.append(
-                Workout(
-                    exercise_name=self.normalize_exercise_name(workout.exercise_name),
-                    sets=workout.sets,
-                    reps=workout.reps,
-                    weight=workout.weight,
-                    duration=workout.duration,
-                    workout_datetime=workout.workout_datetime,
-                )
-            )
-
-        return sorted(
-            normalized_workouts,
-            key=lambda workout: self._parse_datetime(workout.workout_datetime),
-            reverse=True,
-        )
-
-    def get_all_exercise_names(self) -> list[str]:
-        names = {
-            self.normalize_exercise_name(workout.exercise_name)
-            for workout in self.repository.load_workouts()
-            if workout.exercise_name.strip()
-        }
-        return sorted(name for name in names if name)
-
-    def get_workout_summary(self) -> dict[str, float | int | str]:
-        workouts = self.get_workouts()
-        total_workouts = len(workouts)
-        total_sets = sum(workout.sets for workout in workouts)
-        total_reps = sum(workout.reps for workout in workouts)
-        total_duration = sum(workout.duration for workout in workouts)
-        total_volume = sum(workout.sets * workout.reps * workout.weight for workout in workouts)
-
-        if workouts:
-            exercise_counts: dict[str, int] = {}
-            for workout in workouts:
-                exercise_counts[workout.exercise_name] = exercise_counts.get(workout.exercise_name, 0) + 1
-            top_exercise = max(exercise_counts, key=exercise_counts.get)
-        else:
-            top_exercise = "N/A"
-
-        return {
-            "total_workouts": total_workouts,
-            "total_sets": total_sets,
-            "total_reps": total_reps,
-            "total_duration": total_duration,
-            "top_exercise": top_exercise,
-            "total_volume": total_volume,
-        }
-
-    def delete_workout(self, workout_to_delete: Workout) -> bool:
         workouts = self.repository.load_workouts()
-        for index, workout in enumerate(workouts):
-            candidate = Workout(
-                exercise_name=self.normalize_exercise_name(workout.exercise_name),
-                sets=workout.sets,
-                reps=workout.reps,
-                weight=workout.weight,
-                duration=workout.duration,
-                workout_datetime=workout.workout_datetime,
-            )
-            if candidate == workout_to_delete:
-                del workouts[index]
-                self.repository.save_workouts(workouts)
-                return True
-        return False
 
-    def normalize_and_save_existing_workouts(self) -> None:
-        workouts = self.repository.load_workouts()
-        normalized = [
+        normalized_workouts = [
             Workout(
                 exercise_name=self.normalize_exercise_name(workout.exercise_name),
                 sets=workout.sets,
@@ -306,16 +244,90 @@ class WorkoutService:
             )
             for workout in workouts
         ]
-        self.repository.save_workouts(normalized)
 
+        def sort_key(workout: Workout) -> datetime:
+            return self._parse_datetime(workout.workout_datetime)
 
-def main() -> None:
-    service = WorkoutService()
-    service.normalize_and_save_existing_workouts()
-    summary = service.get_workout_summary()
-    print("Workout summary:")
-    print(summary)
+        return sorted(normalized_workouts, key=sort_key, reverse=True)
 
+    def get_all_exercise_names(self) -> list[str]:
+        names = {
+            self.normalize_exercise_name(workout.exercise_name)
+            for workout in self.repository.load_workouts()
+            if workout.exercise_name.strip()
+        }
+        return sorted(name for name in names if name)
 
-if __name__ == "__main__":
-    main()
+    def get_workout_summary(self) -> dict[str, int | float | str]:
+        workouts = self.get_workouts()
+
+        total_workouts = len(workouts)
+        total_sets = sum(workout.sets for workout in workouts)
+        total_reps = sum(workout.reps for workout in workouts)
+        total_duration = sum(workout.duration for workout in workouts)
+        total_volume = sum(workout.sets * workout.reps * workout.weight for workout in workouts)
+
+        frequency: dict[str, int] = {}
+        for workout in workouts:
+            frequency[workout.exercise_name] = frequency.get(workout.exercise_name, 0) + 1
+
+        top_exercise = "N/A"
+        if frequency:
+            top_exercise = max(frequency, key=frequency.get)
+
+        return {
+            "total_workouts": total_workouts,
+            "total_sets": total_sets,
+            "total_reps": total_reps,
+            "total_duration": total_duration,
+            "total_volume": total_volume,
+            "top_exercise": top_exercise,
+        }
+
+    def delete_workout(self, target_workout: Workout) -> bool:
+        workouts = self.repository.load_workouts()
+        remaining_workouts: list[Workout] = []
+        deleted = False
+
+        target_name = self.normalize_exercise_name(target_workout.exercise_name)
+
+        for workout in workouts:
+            current_name = self.normalize_exercise_name(workout.exercise_name)
+
+            is_match = (
+                current_name == target_name
+                and workout.sets == target_workout.sets
+                and workout.reps == target_workout.reps
+                and float(workout.weight) == float(target_workout.weight)
+                and workout.duration == target_workout.duration
+                and workout.workout_datetime == target_workout.workout_datetime
+            )
+
+            if is_match and not deleted:
+                deleted = True
+                continue
+
+            remaining_workouts.append(workout)
+
+        if deleted:
+            self.repository.save_workouts(remaining_workouts)
+
+        return deleted
+
+    def normalize_and_save_existing_workouts(self) -> list[Workout]:
+        workouts = self.repository.load_workouts()
+
+        normalized_workouts = [
+            Workout(
+                exercise_name=self.normalize_exercise_name(workout.exercise_name),
+                sets=workout.sets,
+                reps=workout.reps,
+                weight=workout.weight,
+                duration=workout.duration,
+                workout_datetime=workout.workout_datetime,
+            )
+            for workout in workouts
+        ]
+
+        self.repository.save_workouts(normalized_workouts)
+        return normalized_workouts
