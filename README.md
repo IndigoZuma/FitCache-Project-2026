@@ -14,7 +14,7 @@ FitCache is a beginner-friendly Python desktop workout tracker. It allows users 
 - Delete selected workouts
 - Pytest test suite
 
-### Requirements
+### Developer Requirements
 - Python 3.13+
 - ttkbootstrap==1.12.0
 - pyspellchecker==0.8.3
