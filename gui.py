@@ -7,8 +7,7 @@ from tkinter import messagebox, simpledialog
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import BOTH, END, LEFT, RIGHT, X, Y
 
-from main import DATETIME_FORMAT, Workout, WorkoutService
-
+from main import DATETIME_FORMAT, Workout, WorkoutDataError, WorkoutService
 
 APP_TITLE = "FitCache"
 APP_SIZE = (1440, 920)
@@ -28,11 +27,36 @@ FAINT_TEXT = "#6f84a8"
 ENTRY_BG = "#0f1728"
 
 MILESTONES = [
-    {"name": "Foundation Tier", "weight": 1000, "icon": "●", "descriptor": "Your training base is taking shape."},
-    {"name": "Performance Tier", "weight": 5000, "icon": "◆", "descriptor": "A strong body of work is building across your sessions."},
-    {"name": "Piano Tier", "weight": 8000, "icon": "■", "descriptor": "You have moved the equivalent of a grand piano."},
-    {"name": "Elephant Tier", "weight": 12000, "icon": "▲", "descriptor": "You have moved the equivalent of an elephant."},
-    {"name": "Heavy Transport Tier", "weight": 30000, "icon": "★", "descriptor": "An elite lifetime load milestone has been reached."},
+    {
+        "name": "Foundation Tier",
+        "weight": 1000,
+        "icon": "●",
+        "descriptor": "Your training base is taking shape.",
+    },
+    {
+        "name": "Performance Tier",
+        "weight": 5000,
+        "icon": "◆",
+        "descriptor": "A strong body of work is building across your sessions.",
+    },
+    {
+        "name": "Piano Tier",
+        "weight": 8000,
+        "icon": "■",
+        "descriptor": "You have moved the equivalent of a grand piano.",
+    },
+    {
+        "name": "Elephant Tier",
+        "weight": 12000,
+        "icon": "▲",
+        "descriptor": "You have moved the equivalent of an elephant.",
+    },
+    {
+        "name": "Heavy Transport Tier",
+        "weight": 30000,
+        "icon": "★",
+        "descriptor": "An elite lifetime load milestone has been reached.",
+    },
 ]
 
 
@@ -69,7 +93,9 @@ class FitCacheApp(ttk.Window):
         self.total_volume_var = tk.StringVar(value="0.0 lb")
 
         self.milestone_title_var = tk.StringVar(value="Starter Load")
-        self.milestone_copy_var = tk.StringVar(value="Log your first sessions to unlock milestones.")
+        self.milestone_copy_var = tk.StringVar(
+            value="Log your first sessions to unlock milestones."
+        )
         self.milestone_stat_var = tk.StringVar(value="0.0 lb moved")
         self.next_goal_var = tk.StringVar(value="Next milestone: 1,000 lb")
         self.progress_percent_var = tk.StringVar(value="0%")
@@ -77,7 +103,11 @@ class FitCacheApp(ttk.Window):
         self._configure_styles()
         self._build_layout()
         self._set_default_datetime()
-        self.refresh_all_views()
+
+        try:
+            self.refresh_all_views()
+        except WorkoutDataError as exc:
+            self._handle_data_error(exc)
 
     def _configure_styles(self) -> None:
         style = self.style
@@ -90,7 +120,11 @@ class FitCacheApp(ttk.Window):
         style.configure("Alt.TFrame", background=CARD_ALT)
 
         style.configure("TNotebook", background=BG_COLOR, borderwidth=0)
-        style.configure("TNotebook.Tab", padding=(16, 8), font=("Segoe UI Semibold", 10))
+        style.configure(
+            "TNotebook.Tab",
+            padding=(16, 8),
+            font=("Segoe UI Semibold", 10),
+        )
 
         style.configure(
             "AppTitle.TLabel",
@@ -117,9 +151,17 @@ class FitCacheApp(ttk.Window):
             font=("Segoe UI Semibold", 12),
         )
         style.configure("Card.TLabel", background=CARD_COLOR, foreground=TEXT_COLOR)
-        style.configure("Muted.Card.TLabel", background=CARD_COLOR, foreground=MUTED_TEXT)
+        style.configure(
+            "Muted.Card.TLabel",
+            background=CARD_COLOR,
+            foreground=MUTED_TEXT,
+        )
         style.configure("Alt.TLabel", background=CARD_ALT, foreground=TEXT_COLOR)
-        style.configure("Muted.Alt.TLabel", background=CARD_ALT, foreground=MUTED_TEXT)
+        style.configure(
+            "Muted.Alt.TLabel",
+            background=CARD_ALT,
+            foreground=MUTED_TEXT,
+        )
         style.configure(
             "MetricTitle.TLabel",
             background=CARD_COLOR,
@@ -232,7 +274,14 @@ class FitCacheApp(ttk.Window):
         self._create_entry_field(form_card, "Reps", self.reps_var, 2, 0)
         self._create_entry_field(form_card, "Weight (lb)", self.weight_var, 2, 1)
         self._create_entry_field(form_card, "Duration (minutes)", self.duration_var, 3, 0)
-        self._create_entry_field(form_card, "Date & Time", self.datetime_var, 3, 1, readonly=True)
+        self._create_entry_field(
+            form_card,
+            "Date & Time",
+            self.datetime_var,
+            3,
+            1,
+            readonly=True,
+        )
 
         button_row = ttk.Frame(form_card, style="Card.TFrame")
         button_row.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(18, 0))
@@ -264,7 +313,10 @@ class FitCacheApp(ttk.Window):
 
         ttk.Label(
             tips_card,
-            text="Choose an exercise from the list or use Add Exercise... to create a new one. The service layer will normalize capitalization and common spelling issues when saving.",
+            text=(
+                "Choose an exercise from the list or use Add Exercise... to create a new one. "
+                "The service layer will normalize capitalization and common spelling issues when saving."
+            ),
             style="Muted.Alt.TLabel",
             wraplength=900,
             justify="left",
@@ -286,7 +338,7 @@ class FitCacheApp(ttk.Window):
             button_wrap,
             text="Refresh",
             bootstyle="secondary-outline",
-            command=self.refresh_all_views,
+            command=self.safe_refresh_all_views,
         ).pack(side=LEFT, padx=(0, 8))
 
         ttk.Button(
@@ -330,7 +382,11 @@ class FitCacheApp(ttk.Window):
 
         self.history_tree.column("exercise", anchor="w")
 
-        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.history_tree.yview)
+        scrollbar = ttk.Scrollbar(
+            table_frame,
+            orient="vertical",
+            command=self.history_tree.yview,
+        )
         self.history_tree.configure(yscrollcommand=scrollbar.set)
 
         self.history_tree.pack(side=LEFT, fill=BOTH, expand=True)
@@ -473,7 +529,10 @@ class FitCacheApp(ttk.Window):
         card = ttk.Frame(parent, style="Card.TFrame", padding=18)
         card.pack(fill=BOTH, expand=True)
 
-        ttk.Label(card, text="Recent Workouts", style="Section.TLabel").pack(anchor="w", pady=(0, 12))
+        ttk.Label(card, text="Recent Workouts", style="Section.TLabel").pack(
+            anchor="w",
+            pady=(0, 12),
+        )
 
         columns = ("exercise", "sets", "reps", "weight", "duration", "date")
         self.dashboard_tree = ttk.Treeview(
@@ -527,7 +586,10 @@ class FitCacheApp(ttk.Window):
         card = ttk.Frame(parent, style="Card.TFrame", padding=18)
         card.pack(fill=BOTH, expand=True)
 
-        ttk.Label(card, text="Milestone Preview", style="Section.TLabel").pack(anchor="w", pady=(0, 12))
+        ttk.Label(card, text="Milestone Preview", style="Section.TLabel").pack(
+            anchor="w",
+            pady=(0, 12),
+        )
 
         ttk.Label(
             card,
@@ -565,7 +627,12 @@ class FitCacheApp(ttk.Window):
         meta = ttk.Frame(card, style="Card.TFrame")
         meta.pack(fill=X)
 
-        ttk.Label(meta, textvariable=self.next_goal_var, style="Muted.Card.TLabel").pack(side=LEFT)
+        ttk.Label(
+            meta,
+            textvariable=self.next_goal_var,
+            style="Muted.Card.TLabel",
+        ).pack(side=LEFT)
+
         tk.Label(
             meta,
             textvariable=self.progress_percent_var,
@@ -651,7 +718,13 @@ class FitCacheApp(ttk.Window):
         if readonly:
             entry.configure(state="readonly")
 
-        entry.grid(row=row * 2, column=column, sticky="ew", padx=(0, 8), pady=(0, 8))
+        entry.grid(
+            row=row * 2,
+            column=column,
+            sticky="ew",
+            padx=(0, 8),
+            pady=(0, 8),
+        )
 
     def _create_summary_row(
         self,
@@ -678,6 +751,19 @@ class FitCacheApp(ttk.Window):
 
     def _set_default_datetime(self) -> None:
         self.datetime_var.set(datetime.now().strftime(DATETIME_FORMAT))
+
+    def _handle_data_error(self, exc: Exception) -> None:
+        self.status_var.set("Workout data error. Please repair or replace workouts.json.")
+        messagebox.showerror(
+            "Workout Data Error",
+            f"The workout data could not be loaded safely.\n\n{exc}",
+        )
+
+    def safe_refresh_all_views(self) -> None:
+        try:
+            self.refresh_all_views()
+        except WorkoutDataError as exc:
+            self._handle_data_error(exc)
 
     def _refresh_exercise_dropdown(self) -> None:
         self.exercise_names = self.service.get_all_exercise_names()
@@ -745,22 +831,28 @@ class FitCacheApp(ttk.Window):
         try:
             workout = self.service.add_workout(
                 exercise_name=self.exercise_var.get(),
-                sets=int(self.sets_var.get()),
-                reps=int(self.reps_var.get()),
-                weight=float(self.weight_var.get()),
-                duration=int(self.duration_var.get()),
+                sets=self.sets_var.get(),
+                reps=self.reps_var.get(),
+                weight=self.weight_var.get(),
+                duration=self.duration_var.get(),
                 workout_datetime=self.datetime_var.get(),
             )
         except ValueError as exc:
             messagebox.showerror("Input Error", str(exc))
             self.status_var.set("Unable to save workout. Please correct the form.")
             return
+        except WorkoutDataError as exc:
+            self._handle_data_error(exc)
+            return
         except Exception as exc:
-            messagebox.showerror("Application Error", f"An unexpected error occurred:\n\n{exc}")
+            messagebox.showerror(
+                "Application Error",
+                f"An unexpected error occurred:\n\n{exc}",
+            )
             self.status_var.set("An unexpected error occurred.")
             return
 
-        self.refresh_all_views()
+        self.safe_refresh_all_views()
         self.clear_form()
         self.status_var.set(f"Saved workout: {workout.exercise_name}.")
         messagebox.showinfo("Success", "Workout saved successfully.")
@@ -773,16 +865,9 @@ class FitCacheApp(ttk.Window):
             return
 
         item_id = selected[0]
-        tags = self.history_tree.item(item_id, "tags")
-        workout_tag = tags[0] if tags else None
-
-        if workout_tag is None:
-            messagebox.showerror("Error", "Could not identify the selected workout.")
-            self.status_var.set("Delete failed: missing workout reference.")
-            return
-
+        workout_id = self.history_tree.item(item_id, "iid")
         values = self.history_tree.item(item_id, "values")
-        exercise_name = values[0]
+        exercise_name = values[0] if values else "selected workout"
 
         confirmed = messagebox.askyesno(
             "Confirm Delete",
@@ -792,38 +877,32 @@ class FitCacheApp(ttk.Window):
             self.status_var.set("Delete cancelled.")
             return
 
-        resolved_workout = self._workout_from_tag(workout_tag)
-        if resolved_workout is None:
-            messagebox.showerror("Error", "Could not match the selected workout in storage.")
-            self.status_var.set("Delete failed: workout not found.")
+        try:
+            resolved_workout = self.service.get_workout_by_id(workout_id)
+            if resolved_workout is None:
+                messagebox.showerror(
+                    "Error",
+                    "Could not match the selected workout in storage.",
+                )
+                self.status_var.set("Delete failed: workout not found.")
+                return
+
+            deleted = self.service.delete_workout_by_id(workout_id)
+        except WorkoutDataError as exc:
+            self._handle_data_error(exc)
             return
 
-        deleted = self.service.delete_workout(resolved_workout)
         if deleted:
-            self.refresh_all_views()
+            self.selected_workout = None
+            self.safe_refresh_all_views()
             self.status_var.set(f"Deleted workout: {resolved_workout.exercise_name}.")
             messagebox.showinfo("Deleted", "Workout deleted successfully.")
         else:
-            messagebox.showerror("Delete Failed", "The selected workout could not be deleted.")
+            messagebox.showerror(
+                "Delete Failed",
+                "The selected workout could not be deleted.",
+            )
             self.status_var.set("Delete failed.")
-
-    def _workout_to_tag(self, workout: Workout) -> str:
-        return "|||".join(
-            [
-                workout.exercise_name,
-                str(workout.sets),
-                str(workout.reps),
-                f"{workout.weight:.1f}",
-                str(workout.duration),
-                workout.workout_datetime,
-            ]
-        )
-
-    def _workout_from_tag(self, tag_value: str) -> Workout | None:
-        for workout in self.service.get_workouts():
-            if self._workout_to_tag(workout) == tag_value:
-                return workout
-        return None
 
     def refresh_all_views(self) -> None:
         self._set_default_datetime()
@@ -851,6 +930,7 @@ class FitCacheApp(ttk.Window):
             tree.insert(
                 "",
                 END,
+                iid=workout.id,
                 values=(
                     workout.exercise_name,
                     workout.sets,
@@ -859,7 +939,6 @@ class FitCacheApp(ttk.Window):
                     workout.duration,
                     workout.workout_datetime,
                 ),
-                tags=(self._workout_to_tag(workout),),
             )
 
     def _on_tree_select(self, _event: tk.Event) -> None:
@@ -868,12 +947,8 @@ class FitCacheApp(ttk.Window):
             self.selected_workout = None
             return
 
-        tag_list = self.history_tree.item(selected[0], "tags")
-        if not tag_list:
-            self.selected_workout = None
-            return
-
-        self.selected_workout = self._workout_from_tag(tag_list[0])
+        workout_id = selected[0]
+        self.selected_workout = self.service.get_workout_by_id(workout_id)
 
     def _update_milestone(self, total_volume: float) -> None:
         current = MILESTONES[0]
