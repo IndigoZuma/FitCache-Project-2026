@@ -7,22 +7,25 @@ import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 from spellchecker import SpellChecker
 
 DATETIME_FORMAT = "%Y-%m-%d %H:%M"
 
-def get_app_dir() -> Path:
+
+class WorkoutDataError(Exception):
+    """Raised when persisted workout data is corrupted or invalid."""
+    pass
+
+
+def get_base_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent
 
-def get_data_file() -> Path:
-    return get_app_dir() / "workouts.json"
 
-BASE_DIR = get_app_dir()
-DATA_FILE = get_data_file()
+BASE_DIR = get_base_dir()
+DATA_FILE = BASE_DIR / "workouts.json"
 
 
 @dataclass(frozen=True)
@@ -39,21 +42,28 @@ class Workout:
 class WorkoutRepository:
     def __init__(self, file_path: Path | str = DATA_FILE) -> None:
         self.file_path = Path(file_path)
-        self._ensure_data_file()
+        if not self.file_path.exists():
+            self.file_path.write_text("[]", encoding="utf-8")
 
-    def _ensure_data_file(self) -> None:
-        try:
-            self.file_path.parent.mkdir(parents=True, exist_ok=True)
-            if not self.file_path.exists():
-                self.file_path.write_text("[]", encoding="utf-8")
-        except OSError as exc:
-            raise WorkoutDataError(f"Unable to prepare data file: {exc}") from exc
+    def _normalize_datetime_string(self, value: str) -> str:
+        value = str(value).strip()
+        if not value:
+            return datetime.now().strftime(DATETIME_FORMAT)
 
-    def _read_json_list(self) -> list[dict[str, Any]]:
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+            try:
+                parsed = datetime.strptime(value, fmt)
+                return parsed.strftime(DATETIME_FORMAT)
+            except ValueError:
+                continue
+
+        raise WorkoutDataError("invalid field values")
+
+    def load_workouts(self) -> list[Workout]:
         try:
             raw_text = self.file_path.read_text(encoding="utf-8").strip()
         except OSError as exc:
-            raise WorkoutDataError(f"Unable to read workout data: {exc}") from exc
+            raise WorkoutDataError("unable to read workout data") from exc
 
         if not raw_text:
             return []
@@ -61,97 +71,52 @@ class WorkoutRepository:
         try:
             data = json.loads(raw_text)
         except json.JSONDecodeError as exc:
-            raise WorkoutDataError(
-                "Workout data file is corrupted and could not be parsed."
-            ) from exc
+            raise WorkoutDataError("corrupted workout data") from exc
 
         if not isinstance(data, list):
-            raise WorkoutDataError("Workout data file must contain a JSON list.")
+            raise WorkoutDataError("Workout data must be a JSON list.")
 
-        normalized_items: list[dict[str, Any]] = []
-        for index, item in enumerate(data):
-            if not isinstance(item, dict):
-                raise WorkoutDataError(
-                    f"Workout record at index {index} is invalid."
-                )
-            normalized_items.append(item)
-
-        return normalized_items
-
-    def _deserialize_workout(self, item: dict[str, Any], index: int) -> Workout:
-        try:
-            workout_id = str(item.get("id", "")).strip() or str(uuid.uuid4())
-            exercise_name = str(item["exercise_name"]).strip()
-            sets = int(item["sets"])
-            reps = int(item["reps"])
-            weight = float(item["weight"])
-            duration = int(item["duration"])
-            workout_datetime = str(item["workout_datetime"]).strip()
-        except KeyError as exc:
-            raise WorkoutDataError(
-                f"Workout record at index {index} is missing required field: {exc.args[0]}"
-            ) from exc
-        except (TypeError, ValueError) as exc:
-            raise WorkoutDataError(
-                f"Workout record at index {index} contains invalid field values."
-            ) from exc
-
-        if not exercise_name:
-            raise WorkoutDataError(
-                f"Workout record at index {index} has a blank exercise name."
-            )
-
-        if sets <= 0 or reps <= 0 or duration <= 0:
-            raise WorkoutDataError(
-                f"Workout record at index {index} has invalid positive-number fields."
-            )
-
-        if weight < 0:
-            raise WorkoutDataError(
-                f"Workout record at index {index} has a negative weight."
-            )
-
-        self._validate_datetime_string(workout_datetime, index)
-
-        return Workout(
-            id=workout_id,
-            exercise_name=exercise_name,
-            sets=sets,
-            reps=reps,
-            weight=weight,
-            duration=duration,
-            workout_datetime=workout_datetime,
-        )
-
-    def _validate_datetime_string(self, value: str, index: int) -> None:
-        for fmt in ("%Y-%m-%d %H:%M:%S", DATETIME_FORMAT):
-            try:
-                datetime.strptime(value, fmt)
-                return
-            except ValueError:
-                continue
-
-        raise WorkoutDataError(
-            f"Workout record at index {index} has an invalid date/time format."
-        )
-
-    def load_workouts(self) -> list[Workout]:
-        raw_items = self._read_json_list()
         workouts: list[Workout] = []
 
-        for index, item in enumerate(raw_items):
-            workouts.append(self._deserialize_workout(item, index))
+        for item in data:
+            if not isinstance(item, dict):
+                raise WorkoutDataError("invalid field values")
+
+            try:
+                workout_id = str(item.get("id", "")).strip() or str(uuid.uuid4())
+                exercise_name = str(item.get("exercise_name", "")).strip()
+                sets = int(item.get("sets", 0))
+                reps = int(item.get("reps", 0))
+                weight = float(item.get("weight", 0))
+                duration = int(item.get("duration", 0))
+                workout_datetime = self._normalize_datetime_string(
+                    item.get("workout_datetime", "")
+                )
+            except WorkoutDataError:
+                raise
+            except (TypeError, ValueError) as exc:
+                raise WorkoutDataError("invalid field values") from exc
+
+            workouts.append(
+                Workout(
+                    id=workout_id,
+                    exercise_name=exercise_name,
+                    sets=sets,
+                    reps=reps,
+                    weight=weight,
+                    duration=duration,
+                    workout_datetime=workout_datetime,
+                )
+            )
 
         return workouts
 
     def save_workouts(self, workouts: list[Workout]) -> None:
         data = [asdict(workout) for workout in workouts]
-
         try:
-            serialized = json.dumps(data, indent=4)
-            self.file_path.write_text(serialized, encoding="utf-8")
+            self.file_path.write_text(json.dumps(data, indent=4), encoding="utf-8")
         except OSError as exc:
-            raise WorkoutDataError(f"Unable to save workout data: {exc}") from exc
+            raise WorkoutDataError("unable to save workout data") from exc
 
 
 class WorkoutService:
@@ -217,7 +182,7 @@ class WorkoutService:
         }
 
     def _parse_datetime(self, value: str) -> datetime:
-        for fmt in ("%Y-%m-%d %H:%M:%S", DATETIME_FORMAT):
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
             try:
                 return datetime.strptime(value, fmt)
             except ValueError:
@@ -247,11 +212,7 @@ class WorkoutService:
                 corrected_words.append(self.word_aliases[word])
                 continue
 
-            if word in self.exercise_dictionary_words:
-                corrected_words.append(word)
-                continue
-
-            if len(word) <= 3:
+            if len(word) <= 2:
                 corrected_words.append(word)
                 continue
 
@@ -265,7 +226,7 @@ class WorkoutService:
 
         return self._capitalize_words(normalized)
 
-    def _build_workout(
+    def add_workout(
         self,
         exercise_name: str,
         sets: int,
@@ -273,7 +234,6 @@ class WorkoutService:
         weight: float,
         duration: int,
         workout_datetime: str | None = None,
-        workout_id: str | None = None,
     ) -> Workout:
         normalized_exercise_name = self.normalize_exercise_name(exercise_name)
         if not normalized_exercise_name:
@@ -304,34 +264,14 @@ class WorkoutService:
         parsed_timestamp = self._parse_datetime(timestamp)
         normalized_timestamp = parsed_timestamp.strftime(DATETIME_FORMAT)
 
-        resolved_id = str(workout_id).strip() if workout_id else str(uuid.uuid4())
-
-        return Workout(
-            id=resolved_id,
+        workout = Workout(
+            id=str(uuid.uuid4()),
             exercise_name=normalized_exercise_name,
             sets=sets,
             reps=reps,
             weight=weight,
             duration=duration,
             workout_datetime=normalized_timestamp,
-        )
-
-    def add_workout(
-        self,
-        exercise_name: str,
-        sets: int,
-        reps: int,
-        weight: float,
-        duration: int,
-        workout_datetime: str | None = None,
-    ) -> Workout:
-        workout = self._build_workout(
-            exercise_name=exercise_name,
-            sets=sets,
-            reps=reps,
-            weight=weight,
-            duration=duration,
-            workout_datetime=workout_datetime,
         )
 
         workouts = self.repository.load_workouts()
@@ -355,8 +295,8 @@ class WorkoutService:
             for workout in workouts
         ]
 
-        def sort_key(workout: Workout) -> tuple[datetime, str]:
-            return (self._parse_datetime(workout.workout_datetime), workout.id)
+        def sort_key(workout: Workout) -> datetime:
+            return self._parse_datetime(workout.workout_datetime)
 
         return sorted(normalized_workouts, key=sort_key, reverse=True)
 
@@ -375,9 +315,7 @@ class WorkoutService:
         total_sets = sum(workout.sets for workout in workouts)
         total_reps = sum(workout.reps for workout in workouts)
         total_duration = sum(workout.duration for workout in workouts)
-        total_volume = sum(
-            workout.sets * workout.reps * workout.weight for workout in workouts
-        )
+        total_volume = sum(workout.sets * workout.reps * workout.weight for workout in workouts)
 
         frequency: dict[str, int] = {}
         for workout in workouts:
@@ -385,10 +323,7 @@ class WorkoutService:
 
         top_exercise = "N/A"
         if frequency:
-            top_exercise = max(
-                sorted(frequency),
-                key=lambda exercise: frequency[exercise],
-            )
+            top_exercise = max(frequency, key=frequency.get)
 
         return {
             "total_workouts": total_workouts,
@@ -400,22 +335,14 @@ class WorkoutService:
         }
 
     def get_workout_by_id(self, workout_id: str) -> Workout | None:
-        normalized_id = str(workout_id).strip()
-        if not normalized_id:
-            return None
-
         for workout in self.get_workouts():
-            if workout.id == normalized_id:
+            if workout.id == workout_id:
                 return workout
         return None
 
     def delete_workout_by_id(self, workout_id: str) -> bool:
-        normalized_id = str(workout_id).strip()
-        if not normalized_id:
-            return False
-
         workouts = self.repository.load_workouts()
-        remaining_workouts = [workout for workout in workouts if workout.id != normalized_id]
+        remaining_workouts = [workout for workout in workouts if workout.id != workout_id]
 
         if len(remaining_workouts) == len(workouts):
             return False
@@ -424,8 +351,10 @@ class WorkoutService:
         return True
 
     def delete_workout(self, target_workout: Workout) -> bool:
-        if target_workout.id.strip():
-            return self.delete_workout_by_id(target_workout.id)
+        if target_workout.id:
+            deleted = self.delete_workout_by_id(target_workout.id)
+            if deleted:
+                return True
 
         workouts = self.repository.load_workouts()
         remaining_workouts: list[Workout] = []
@@ -467,9 +396,7 @@ class WorkoutService:
                 reps=workout.reps,
                 weight=workout.weight,
                 duration=workout.duration,
-                workout_datetime=self._parse_datetime(workout.workout_datetime).strftime(
-                    DATETIME_FORMAT
-                ),
+                workout_datetime=self._parse_datetime(workout.workout_datetime).strftime(DATETIME_FORMAT),
             )
             for workout in workouts
         ]
