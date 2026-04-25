@@ -13,19 +13,16 @@ from spellchecker import SpellChecker
 
 DATETIME_FORMAT = "%Y-%m-%d %H:%M"
 
-
-class WorkoutDataError(Exception):
-    """Raised when the workout data file cannot be safely read or written."""
-
-
-def get_base_dir() -> Path:
+def get_app_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent
 
+def get_data_file() -> Path:
+    return get_app_dir() / "workouts.json"
 
-BASE_DIR = get_base_dir()
-DATA_FILE = BASE_DIR / "workouts.json"
+BASE_DIR = get_app_dir()
+DATA_FILE = get_data_file()
 
 
 @dataclass(frozen=True)
