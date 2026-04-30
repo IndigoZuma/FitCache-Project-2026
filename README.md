@@ -2,7 +2,7 @@
 
 SDEV 365 Group 1 Project Management Python Application
 
-Group 1 Project Members: Sharon Campbell, Robert Chickadaunce, David Cruz, Blaize Fox, Kaleb Hunter, Elijah Terry
+Group 1 Project Members: Sharon Campbell, Elijah Terry, Kaleb Hunter, Blaize Fox,Da vid Cruz and Robert Chickadaunce.
 
 ## FitCache Desktop App
 
