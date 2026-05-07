@@ -1,6 +1,6 @@
 # FitCache-Project-2026
 
-SDEV 365 Group 1 Project Management Python Application
+SDEV 265 Group 1 Project Management Python Application
 
 Group 1 Project Members: Sharon Campbell, Elijah Terry, Kaleb Hunter, Blaize Fox, David Cruz and Robert Chickadaunce.
 
