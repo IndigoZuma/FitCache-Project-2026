@@ -53,5 +53,5 @@ Or run the whole suite:
 python -m pytest
 ```
 
-## Project Structure
+
 
